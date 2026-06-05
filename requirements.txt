@@ -1,0 +1,20 @@
+opencv-python
+face-recognition
+numpy
+Pillow
+flask
+configparser
+
+# Explanation of Requirements
+# 1. opencv-python   : Provides OpenCV bindings for Python. Used for accessing the webcam,
+#                      capturing frames, drawing rectangles and labels on detected faces.
+# 2. face-recognition: Face recognition library that wraps around dlib. Used for detecting,
+#                      encoding, and comparing faces in real-time from the camera feed.
+# 3. numpy           : Fundamental package for numerical computations. Used for array
+#                      operations during face distance calculations.
+# 4. Pillow          : Python Imaging Library. Used for image processing tasks such as
+#                      handling uploaded face images.
+# 5. flask           : Lightweight Python web framework. Powers the backend API and serves
+#                      the frontend HTML interface over HTTP.
+# 6. configparser    : Module used to handle configuration files (config.ini) for paths
+#                      and camera settings.

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Attendance System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+  <!-- External CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="logo">Smart<span>.</span>Attendance</div>
+    <div class="header-status">
+      <div class="dot" id="status-dot"></div>
+      <span id="header-status-text">Idle</span>
+    </div>
+  </header>
+
+  <!-- ── Main Layout ── -->
+  <main>
+
+    <!-- Left: Camera Feed -->
+    <div class="camera-panel">
+
+      <div class="panel-header">
+        <span class="panel-title">Live Feed</span>
+        <span class="panel-title" id="face-count-label">0 faces loaded</span>
+      </div>
+
+      <div class="camera-feed-wrapper">
+        <div class="camera-feed-container">
+          <div class="corner-tr"></div>
+          <div class="corner-bl"></div>
+          <div class="scan-line" id="scan-line"></div>
+
+          <div class="no-feed" id="no-feed">
+            <div class="no-feed-icon">⬛</div>
+            <p>Camera not active</p>
+            <p class="sub">Start camera to begin scanning</p>
+          </div>
+
+          <img id="camera-img" src="" alt="Camera Feed" style="display:none;" />
+        </div>
+      </div>
+
+      <div class="camera-controls">
+        <button class="btn" id="btn-start">Start Camera</button>
+        <button class="btn btn-danger" id="btn-stop" disabled>Stop</button>
+        <button class="btn btn-outline" id="btn-records">Records</button>
+      </div>
+
+    </div>
+
+    <!-- Right: Controls & Log -->
+    <div class="right-panel">
+
+      <!-- Status -->
+      <div class="status-block">
+        <div class="status-label">System Status</div>
+        <div class="status-text" id="status-text">System ready. Load faces to begin.</div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-item">
+          <div class="stat-value" id="stat-present">0</div>
+          <div class="stat-label">Present</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="stat-faces">0</div>
+          <div class="stat-label">Faces Loaded</div>
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="controls-block">
+        <div class="panel-title" style="margin-bottom:4px">Controls</div>
+        <button class="btn" id="btn-load">Load Known Faces</button>
+        <button class="btn btn-outline" id="btn-session">New Session</button>
+      </div>
+
+      <!-- Register Face -->
+      <div class="upload-block">
+        <div class="panel-title" style="margin-bottom:12px">Register New Face</div>
+        <div class="input-group">
+          <label class="input-label">Student / Person Name</label>
+          <input type="text" class="input-field" id="face-name" placeholder="e.g. Muhammad Shahzaib" />
+        </div>
+        <label class="file-upload-label" for="face-file-input" id="file-label">
+          📁 Click to select image (JPG/PNG)
+        </label>
+        <input type="file" id="face-file-input" accept=".jpg,.jpeg,.png" />
+        <button class="btn" id="btn-upload">Register Face</button>
+      </div>
+
+      <!-- Attendance Log -->
+      <div class="log-block">
+        <div class="log-header">
+          <span class="panel-title">Attendance Log</span>
+          <span class="panel-title" id="log-count">0 entries</span>
+        </div>
+        <div class="log-list" id="log-list">
+          <div class="empty-log">
+            No attendance recorded<br/>
+            <span style="color:#333">Start camera to begin</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ── Records Modal ── -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-header">
+        <span class="modal-title">All Records</span>
+        <button class="modal-close" id="modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <table class="records-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Date &amp; Time</th>
+            </tr>
+          </thead>
+          <tbody id="records-tbody">
+            <tr>
+              <td colspan="2" style="text-align:center;color:#555;padding:30px">No records found</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Toast Notification ── -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ── JavaScript ── -->
+  <script>
+
+    // ── State ────────────────────────────────────────────────
+    let cameraRunning = false;
+    let pollInterval  = null;
+    let selectedFile  = null;
+    let logEntries    = [];
+
+    // ── DOM Elements ─────────────────────────────────────────
+    const btnStart     = document.getElementById('btn-start');
+    const btnStop      = document.getElementById('btn-stop');
+    const btnLoad      = document.getElementById('btn-load');
+    const btnSession   = document.getElementById('btn-session');
+    const btnUpload    = document.getElementById('btn-upload');
+    const btnRecords   = document.getElementById('btn-records');
+    const statusText   = document.getElementById('status-text');
+    const statusDot    = document.getElementById('status-dot');
+    const headerStatus = document.getElementById('header-status-text');
+    const cameraImg    = document.getElementById('camera-img');
+    const noFeed       = document.getElementById('no-feed');
+    const scanLine     = document.getElementById('scan-line');
+    const logList      = document.getElementById('log-list');
+    const logCount     = document.getElementById('log-count');
+    const statPresent  = document.getElementById('stat-present');
+    const statFaces    = document.getElementById('stat-faces');
+    const faceCountLbl = document.getElementById('face-count-label');
+    const fileInput    = document.getElementById('face-file-input');
+    const fileLabel    = document.getElementById('file-label');
+    const toastEl      = document.getElementById('toast');
+    const modalOverlay = document.getElementById('modal-overlay');
+    const recordsTbody = document.getElementById('records-tbody');
+
+    // ── Toast ─────────────────────────────────────────────────
+    function showToast(msg, isError = false) {
+      toastEl.textContent = msg;
+      toastEl.className = 'toast' + (isError ? ' error' : '') + ' show';
+      setTimeout(() => { toastEl.className = 'toast'; }, 3000);
+    }
+
+    // ── File Select ───────────────────────────────────────────
+    fileInput.addEventListener('change', () => {
+      selectedFile = fileInput.files[0];
+      if (selectedFile) {
+        fileLabel.textContent = '✅ ' + selectedFile.name;
+      }
+    });
+
+    // ── Start Camera ──────────────────────────────────────────
+    btnStart.addEventListener('click', async () => {
+      btnStart.disabled = true;
+      try {
+        const res  = await fetch('/api/start_camera', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          cameraRunning = true;
+          cameraImg.src = '/video_feed';
+          cameraImg.style.display = 'block';
+          noFeed.style.display = 'none';
+          scanLine.classList.add('active');
+          statusDot.classList.add('active');
+          headerStatus.textContent = 'Live';
+          btnStop.disabled = false;
+          startPolling();
+          showToast('Camera started.');
+        } else {
+          btnStart.disabled = false;
+          showToast(data.message, true);
+        }
+      } catch (e) {
+        btnStart.disabled = false;
+        showToast('Failed to start camera.', true);
+      }
+    });
+
+    // ── Stop Camera ───────────────────────────────────────────
+    btnStop.addEventListener('click', async () => {
+      try { await fetch('/api/stop_camera', { method: 'POST' }); } catch (e) {}
+      cameraRunning = false;
+      cameraImg.src = '';
+      cameraImg.style.display = 'none';
+      noFeed.style.display = 'flex';
+      scanLine.classList.remove('active');
+      statusDot.classList.remove('active');
+      headerStatus.textContent = 'Idle';
+      btnStart.disabled = false;
+      btnStop.disabled = true;
+      stopPolling();
+      showToast('Camera stopped.');
+    });
+
+    // ── Load Faces ────────────────────────────────────────────
+    btnLoad.addEventListener('click', async () => {
+      btnLoad.disabled = true;
+      btnLoad.textContent = 'Loading...';
+      try {
+        const res  = await fetch('/api/load_faces', { method: 'POST' });
+        const data = await res.json();
+        statusText.textContent = data.message;
+        if (data.success) {
+          statFaces.textContent    = data.count;
+          faceCountLbl.textContent = data.count + ' face(s) loaded';
+          showToast(data.message);
+        } else {
+          showToast(data.message, true);
+        }
+      } catch (e) {
+        showToast('Failed to load faces.', true);
+      }
+      btnLoad.disabled = false;
+      btnLoad.textContent = 'Load Known Faces';
+    });
+
+    // ── New Session ───────────────────────────────────────────
+    btnSession.addEventListener('click', async () => {
+      if (!confirm('Start a new session? This will clear the current log.')) return;
+      try {
+        await fetch('/api/new_session', { method: 'POST' });
+        logEntries = [];
+        renderLog([]);
+        statPresent.textContent = '0';
+        showToast('New session started.');
+      } catch (e) {
+        showToast('Failed to start new session.', true);
+      }
+    });
+
+    // ── Register Face ─────────────────────────────────────────
+    btnUpload.addEventListener('click', async () => {
+      const name = document.getElementById('face-name').value.trim();
+      if (!name)         { showToast('Please enter a name.', true);    return; }
+      if (!selectedFile) { showToast('Please select an image.', true); return; }
+
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('file', selectedFile);
+
+      btnUpload.disabled = true;
+      btnUpload.textContent = 'Uploading...';
+
+      try {
+        const res  = await fetch('/api/upload_face', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('face-name').value = '';
+          fileLabel.textContent = '📁 Click to select image (JPG/PNG)';
+          selectedFile    = null;
+          fileInput.value = '';
+          showToast(data.message);
+        } else {
+          showToast(data.message, true);
+        }
+      } catch (e) {
+        showToast('Upload failed.', true);
+      }
+
+      btnUpload.disabled = false;
+      btnUpload.textContent = 'Register Face';
+    });
+
+    // ── Records Modal ─────────────────────────────────────────
+    btnRecords.addEventListener('click', async () => {
+      try {
+        const res     = await fetch('/api/attendance');
+        const data    = await res.json();
+        const records = data.records;
+
+        if (records.length === 0) {
+          recordsTbody.innerHTML =
+            '<tr><td colspan="2" style="text-align:center;color:#555;padding:30px">No records found</td></tr>';
+        } else {
+          recordsTbody.innerHTML = records.map(r => `
+            <tr>
+              <td style="font-family:'Syne',sans-serif;font-weight:700">${r.Name}</td>
+              <td style="color:#999">${r.DateTime}</td>
+            </tr>
+          `).join('');
+        }
+        modalOverlay.classList.add('open');
+      } catch (e) {
+        showToast('Failed to load records.', true);
+      }
+    });
+
+    document.getElementById('modal-close').addEventListener('click', () => {
+      modalOverlay.classList.remove('open');
+    });
+
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) modalOverlay.classList.remove('open');
+    });
+
+    // ── Polling ───────────────────────────────────────────────
+    function startPolling() {
+      pollInterval = setInterval(pollStatus, 1500);
+    }
+
+    function stopPolling() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+
+    async function pollStatus() {
+      try {
+        const res  = await fetch('/api/status');
+        const data = await res.json();
+        statusText.textContent   = data.status;
+        statPresent.textContent  = data.attendance_count;
+        statFaces.textContent    = data.faces_loaded;
+        faceCountLbl.textContent = data.faces_loaded + ' face(s) loaded';
+
+        if (data.log.length !== logEntries.length) {
+          logEntries = data.log;
+          renderLog(logEntries);
+        }
+      } catch (e) {}
+    }
+
+    // ── Render Log ────────────────────────────────────────────
+    function renderLog(entries) {
+      logCount.textContent = entries.length + ' entries';
+
+      if (entries.length === 0) {
+        logList.innerHTML = `
+          <div class="empty-log">
+            No attendance recorded<br/>
+            <span style="color:#333">Start camera to begin</span>
+          </div>`;
+        return;
+      }
+
+      logList.innerHTML = [...entries].reverse().map(e => `
+        <div class="log-entry">
+          <div>
+            <div class="log-name">${e.name}</div>
+            <div class="log-time">${e.time}</div>
+          </div>
+          <div class="log-badge">Present</div>
+        </div>
+      `).join('');
+    }
+
+  </script>
+
+</body>
+</html>
